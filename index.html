@@ -1,0 +1,374 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><style>body{margin:0}[hidden]{display:none!important}</style></head><body>
+<title>Carreau</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Figtree:wght@400;600;700&display=swap">
+<style>
+/* Layout: one column, a notebook page holding the board, a HUD above and a pad below. */
+:root {
+  --paper: #f6f7fb;
+  --rule: #c9d3ea;
+  --margin: #e39aa6;
+  --ink: #1f2f6b;
+  --ink-soft: #5a678f;
+  --hatch: #2b3f8f;
+  --ghost: #d1495b;
+  --card: #ffffff;
+  --font-hand: "Caveat", "Comic Sans MS", cursive;
+  --font-ui: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #15192b; --rule: #27304f; --margin: #7a3a4a; --ink: #e6ebff;
+    --ink-soft: #9aa6cc; --hatch: #9fb4ff; --ghost: #ff7a8a; --card: #1d2340;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #15192b; --rule: #27304f; --margin: #7a3a4a; --ink: #e6ebff;
+  --ink-soft: #9aa6cc; --hatch: #9fb4ff; --ghost: #ff7a8a; --card: #1d2340;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--paper);
+  background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--rule) 31px 32px);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  overscroll-behavior: none;
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.app {
+  box-sizing: border-box;
+  height: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: 12px;
+  display: flex; flex-direction: column; gap: 12px;
+  touch-action: none;
+}
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h1 { font-family: var(--font-hand); font-weight: 700; font-size: 2.4rem; line-height: 1; margin: 0; }
+.hud { display: flex; gap: 16px; font-variant-numeric: tabular-nums; }
+.stat { display: flex; flex-direction: column; align-items: flex-end; }
+.stat b { font-size: 1.35rem; line-height: 1.1; }
+.stat span { font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+
+.prompt {
+  min-height: 2.2rem;
+  font-family: var(--font-hand); font-size: 1.7rem; line-height: 1.1;
+  display: flex; align-items: center; gap: 10px;
+}
+.prompt .goal { color: var(--ghost); font-weight: 700; }
+.prompt .combo { margin-left: auto; font-family: var(--font-ui); font-size: .85rem; color: var(--ink-soft); }
+
+.stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.board {
+  position: relative;
+  width: min(100%, 52vh);
+  aspect-ratio: 1;
+  max-width: 100%;
+  border: 3px solid var(--ink);
+  border-radius: 4px;
+  background: var(--paper);
+  box-sizing: border-box;
+}
+.piece, .ghost { position: absolute; box-sizing: border-box; }
+.piece {
+  border: 3px solid var(--ink);
+  background-color: var(--paper);
+  background-image: repeating-linear-gradient(135deg, var(--hatch) 0 2px, transparent 2px 11px);
+  transition: left .18s ease-out, top .18s ease-out, width .18s ease-out, height .18s ease-out;
+}
+.ghost {
+  border: 3px dashed var(--ghost);
+  border-radius: 2px;
+  transition: opacity .15s;
+}
+.board.bump-x .piece { animation: bumpx .22s; }
+.board.bump-y .piece { animation: bumpy .22s; }
+@keyframes bumpx { 25% { translate: -6px 0; } 75% { translate: 6px 0; } }
+@keyframes bumpy { 25% { translate: 0 -6px; } 75% { translate: 0 6px; } }
+.board.hit { animation: hit .3s; }
+@keyframes hit { 40% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--ghost) 35%, transparent); } }
+
+.prompt .menu { margin-left: auto; padding: 4px 12px; font-size: .85rem; }
+.pad { display: grid; grid-template-columns: repeat(3, 64px); grid-template-rows: repeat(2, 52px); gap: 8px; justify-content: center; }
+.pad button { font-size: 1.4rem; }
+.pad .up { grid-column: 2; grid-row: 1; }
+.pad .left { grid-column: 1; grid-row: 2; }
+.pad .down { grid-column: 2; grid-row: 2; }
+.pad .right { grid-column: 3; grid-row: 2; }
+button {
+  font: 600 1rem var(--font-ui);
+  color: var(--ink);
+  background: var(--card);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:active { translate: 0 2px; }
+button:focus-visible { outline: 3px solid var(--ghost); outline-offset: 2px; }
+.hint { text-align: center; font-size: .8rem; color: var(--ink-soft); margin: 0; }
+
+.overlay {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  backdrop-filter: blur(2px);
+}
+.card {
+  background: var(--card); border: 3px solid var(--ink); border-radius: 14px;
+  padding: 20px; max-width: 360px; width: 100%;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.card h2 { font-family: var(--font-hand); font-size: 2.2rem; margin: 0; line-height: 1; text-wrap: balance; }
+.card p { margin: 0; line-height: 1.45; color: var(--ink-soft); }
+.rules { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: .82rem; }
+.rules div { display: flex; align-items: center; gap: 8px; }
+.mini { display: inline-block; border: 2px solid var(--ink); background-image: repeating-linear-gradient(135deg, var(--hatch) 0 1px, transparent 1px 5px); flex: none; }
+.card .actions { display: flex; gap: 8px; }
+.card .actions button { flex: 1; padding: 12px; }
+.card .actions .primary { background: var(--ink); color: var(--paper); }
+.result { font-family: var(--font-hand); font-size: 1.6rem; color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .piece { transition: none; }
+  .board.bump-x .piece, .board.bump-y .piece, .board.hit { animation: none; }
+}
+</style>
+
+<div class="app" id="app">
+  <header>
+    <h1>Carreau</h1>
+    <div class="hud">
+      <div class="stat"><b id="score">0</b><span>Score</span></div>
+      <div class="stat"><b id="time">30</b><span>Time</span></div>
+      <div class="stat"><b id="best">0</b><span>Best</span></div>
+    </div>
+  </header>
+
+  <div class="prompt" id="prompt">Make the <span class="goal" id="goal">big square</span><span class="combo" id="combo"></span><button class="menu" id="btn-menu" hidden>Menu</button></div>
+
+  <div class="stage">
+    <div class="board" id="board" aria-label="Game board" role="img">
+      <div class="ghost" id="ghost"></div>
+      <div class="piece" id="piece"></div>
+    </div>
+  </div>
+
+  <div class="pad" aria-label="Arrow controls">
+    <button class="up" id="btn-up" data-dir="up" aria-label="Up">↑</button>
+    <button class="left" id="btn-left" data-dir="left" aria-label="Left">←</button>
+    <button class="down" id="btn-down" data-dir="down" aria-label="Down">↓</button>
+    <button class="right" id="btn-right" data-dir="right" aria-label="Right">→</button>
+  </div>
+  <p class="hint">Swipe anywhere, use the arrow keys, or tap the pad.</p>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="card">
+    <h2 id="ov-title">Carreau</h2>
+    <p id="ov-text">Every move changes the shape. Sideways moves stretch or shrink the width, up and down moves stretch or shrink the height.</p>
+    <div class="result" id="ov-result" hidden></div>
+    <div class="rules">
+      <div><span class="mini" style="width:12px;height:12px"></span>small square</div>
+      <div><span class="mini" style="width:12px;height:22px"></span>tall rectangle</div>
+      <div><span class="mini" style="width:22px;height:12px"></span>wide rectangle</div>
+      <div><span class="mini" style="width:22px;height:22px"></span>big square</div>
+    </div>
+    <p>Match the dashed target as many times as you can in 30 seconds. Hit it in the fewest moves to build a combo.</p>
+    <div class="actions">
+      <button class="primary" id="btn-play">Play 30 s</button>
+      <button id="btn-free">Free play</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // Board geometry, in % of the board side.
+  // The piece always sits in a corner. Its corner decides its shape:
+  //   left column  -> narrow,  right column -> wide
+  //   bottom row   -> short,   top row      -> tall
+  // So: bottom-left = small square, top-left = tall rectangle,
+  //     top-right = big square, bottom-right = wide rectangle.
+  const SMALL = 30, BIG = 50;
+  const SHAPES = {
+    "0,0": "small square",   // col 0 (left), row 0 (bottom)
+    "0,1": "tall rectangle",
+    "1,1": "big square",
+    "1,0": "wide rectangle",
+  };
+  const ROUND_SECONDS = 30;
+
+  const $ = (id) => document.getElementById(id);
+  const board = $("board"), piece = $("piece"), ghost = $("ghost");
+  const scoreEl = $("score"), timeEl = $("time"), bestEl = $("best");
+  const goalEl = $("goal"), comboEl = $("combo"), promptEl = $("prompt");
+  const overlay = $("overlay"), menuBtn = $("btn-menu");
+
+  let state = { col: 0, row: 0 };
+  let mode = "idle"; // "idle" | "timed" | "free"
+  let target = null, movesSinceTarget = 0, score = 0, combo = 0;
+  let endsAt = 0, timer = null;
+  let best = 0;
+  try { best = Number(localStorage.getItem("carreau-best")) || 0; } catch (e) {}
+  bestEl.textContent = best;
+
+  function rect({ col, row }) {
+    const w = col ? BIG : SMALL;
+    const h = row ? BIG : SMALL;
+    return { left: col ? 100 - w : 0, top: row ? 0 : 100 - h, width: w, height: h };
+  }
+  function place(el, pos) {
+    const r = rect(pos);
+    el.style.left = r.left + "%"; el.style.top = r.top + "%";
+    el.style.width = r.width + "%"; el.style.height = r.height + "%";
+  }
+  const shapeName = (pos) => SHAPES[pos.col + "," + pos.row];
+  const dist = (a, b) => Math.abs(a.col - b.col) + Math.abs(a.row - b.row);
+
+  function render() {
+    place(piece, state);
+    board.setAttribute("aria-label", "Piece is a " + shapeName(state));
+    if (target) { place(ghost, target); ghost.style.opacity = 1; }
+    else ghost.style.opacity = 0;
+  }
+
+  function pulse(cls) {
+    board.classList.remove(cls); void board.offsetWidth; board.classList.add(cls);
+  }
+
+  function move(dir) {
+    if (mode === "idle") return;
+    const next = { ...state };
+    if (dir === "left") next.col = 0;
+    if (dir === "right") next.col = 1;
+    if (dir === "up") next.row = 1;
+    if (dir === "down") next.row = 0;
+    if (next.col === state.col && next.row === state.row) {
+      // Already against that wall: the shape can't change that way.
+      pulse(dir === "left" || dir === "right" ? "bump-x" : "bump-y");
+      try { navigator.vibrate && navigator.vibrate(15); } catch (e) {}
+      return;
+    }
+    state = next;
+    movesSinceTarget++;
+    render();
+    if (mode === "timed" && target && state.col === target.col && state.row === target.row) scoreHit();
+  }
+
+  function newTarget() {
+    const options = Object.keys(SHAPES)
+      .map((k) => ({ col: +k[0], row: +k[2] }))
+      .filter((p) => p.col !== state.col || p.row !== state.row);
+    target = options[Math.floor(Math.random() * options.length)];
+    target.min = dist(state, target);
+    movesSinceTarget = 0;
+    goalEl.textContent = shapeName(target);
+    render();
+  }
+
+  function scoreHit() {
+    const perfect = movesSinceTarget <= target.min;
+    combo = perfect ? combo + 1 : 0;
+    score += 1 + combo;
+    scoreEl.textContent = score;
+    comboEl.textContent = combo > 1 ? "combo ×" + combo : (perfect ? "perfect" : "");
+    pulse("hit");
+    newTarget();
+  }
+
+  function tick() {
+    const left = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+    timeEl.textContent = left;
+    if (left <= 0) endRound();
+  }
+
+  function startTimed() {
+    mode = "timed"; score = 0; combo = 0;
+    scoreEl.textContent = 0; comboEl.textContent = "";
+    promptEl.firstChild.textContent = "Make the ";
+    goalEl.hidden = false;
+    menuBtn.hidden = true;
+    endsAt = Date.now() + ROUND_SECONDS * 1000;
+    clearInterval(timer); timer = setInterval(tick, 200); tick();
+    overlay.hidden = true;
+    newTarget();
+  }
+
+  function startFree() {
+    mode = "free"; target = null;
+    clearInterval(timer);
+    timeEl.textContent = "∞"; scoreEl.textContent = "–"; comboEl.textContent = "";
+    promptEl.firstChild.textContent = "Free play";
+    goalEl.hidden = true;
+    menuBtn.hidden = false;
+    overlay.hidden = true;
+    render();
+  }
+
+  function endRound() {
+    clearInterval(timer);
+    mode = "idle"; target = null; render();
+    if (score > best) {
+      best = score; bestEl.textContent = best;
+      try { localStorage.setItem("carreau-best", String(best)); } catch (e) {}
+    }
+    $("ov-title").textContent = "Time!";
+    const res = $("ov-result");
+    res.hidden = false;
+    res.textContent = "Score " + score + (score >= best && score > 0 ? ", new best" : ", best " + best);
+    $("btn-play").textContent = "Play again";
+    overlay.hidden = false;
+  }
+
+  // Keyboard
+  const KEYS = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down",
+                 a: "left", d: "right", w: "up", s: "down", q: "left", z: "up" };
+  addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && mode !== "idle") { endRound(); return; }
+    const dir = KEYS[e.key] || KEYS[e.key.toLowerCase?.()];
+    if (dir) { e.preventDefault(); move(dir); }
+  });
+
+  // Swipe (pointer events cover touch and mouse)
+  let start = null;
+  const app = $("app");
+  app.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button")) return;
+    start = { x: e.clientX, y: e.clientY };
+  });
+  app.addEventListener("pointerup", (e) => {
+    if (!start) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    start = null;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
+  });
+  app.addEventListener("pointercancel", () => { start = null; });
+
+  // On-screen pad
+  document.querySelectorAll(".pad button").forEach((b) =>
+    b.addEventListener("click", () => move(b.dataset.dir)));
+
+  $("btn-play").addEventListener("click", startTimed);
+  $("btn-free").addEventListener("click", startFree);
+  menuBtn.addEventListener("click", () => {
+    mode = "idle"; menuBtn.hidden = true;
+    $("ov-title").textContent = "Carreau"; $("ov-result").hidden = true;
+    overlay.hidden = false;
+  });
+
+  // Show a sample resting state behind the start card.
+  target = { col: 1, row: 1 };
+  render();
+  target = null;
+  ghost.style.opacity = 1;
+})();
+</script>
+</body></html>
